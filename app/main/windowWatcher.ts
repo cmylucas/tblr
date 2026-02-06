@@ -49,6 +49,13 @@ export function startWatcher(): void {
         return
       }
 
+      // Allow the overlay itself to be active without hiding
+      // This prevents the overlay from disappearing when the user clicks on it
+      if (win.appName === 'Electron' || win.appName.includes('Sheets Overlay')) {
+        // Overlay is active, keep it visible
+        return
+      }
+
       if (win.appName !== 'Google Chrome') {
         hideOverlay()
         return

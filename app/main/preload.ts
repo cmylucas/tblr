@@ -10,6 +10,10 @@ const api = {
   readRange: (range: string) => ipcRenderer.invoke(IPC.READ_RANGE, range),
   writeRange: (range: string, rawText: string) =>
     ipcRenderer.invoke(IPC.WRITE_RANGE, range, rawText),
+  // AI methods
+  analyzeFinancialData: (range: string, mapping: any, context?: string) =>
+    ipcRenderer.invoke(IPC.AI_ANALYZE_FINANCIAL_DATA, range, mapping, context),
+  getInsights: () => ipcRenderer.invoke(IPC.AI_GET_INSIGHTS),
 }
 
 contextBridge.exposeInMainWorld('sheetsOverlay', api)

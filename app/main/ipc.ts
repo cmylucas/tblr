@@ -1,15 +1,27 @@
 import { ipcMain } from 'electron'
-import { IPC, type AuditEntry, type AppStatus, type IpcResult } from './shared/types'
-import { AttachSheetInput, ReadRangeInput, WriteRangeInput } from './shared/schema'
+import { IPC, type AuditEntry, type AppStatus, type IpcResult, type AnalysisResult } from './shared/types'
+import { AttachSheetInput, ReadRangeInput, WriteRangeInput, AnalyzeFinancialDataInput } from './shared/schema'
 import { signIn, signOut, isSignedIn, getEmail, tryRestoreSession } from './auth/googleAuth'
 import { parseSheetUrl } from './sheets/parseSheetUrl'
 import { getSpreadsheetMetadata, readRange, writeRange } from './sheets/sheetsClient'
+import { parseFinancialData, validateColumnMapping } from './ai/financialParser'
+import { aggregateTransactions, generateDataHash } from './ai/dataAggregator'
+import { getDedalusClient } from './ai/dedalusClient'
+import { insightsCache } from './ai/insightsCache'
+import * as dotenv from 'dotenv'
+
+// Load environment variables
+dotenv.config()
 
 // ── App state ──
 
 let currentSpreadsheetId: string | undefined
 let currentSheetNames: string[] = []
 const auditLog: AuditEntry[] = []
+
+// AI state
+let lastAnalysisResult: AnalysisResult | null = null
+let lastDataHash: string | null = null
 
 function addAudit(entry: Omit<AuditEntry, 'id' | 'timestamp'>): void {
   const full: AuditEntry = {
@@ -164,6 +176,135 @@ export function registerIpcHandlers(): void {
       addAudit({ operation: 'write', spreadsheetId: currentSpreadsheetId, range: rawRange, success: false, message: err.message })
       return { ok: false, error: err.message }
     }
+  })
+
+  // AI: Analyze Financial Data
+  ipcMain.handle(
+    IPC.AI_ANALYZE_FINANCIAL_DATA,
+    async (_e, rawRange: string, mapping: any, context?: string): Promise<IpcResult<AnalysisResult>> => {
+      try {
+        const { range, mapping: validatedMapping, context: userContext } = AnalyzeFinancialDataInput.parse({
+          range: rawRange,
+          mapping,
+          context,
+        })
+
+        if (!currentSpreadsheetId) {
+          return { ok: false, error: 'No sheet attached' }
+        }
+        if (!isSignedIn()) {
+          return { ok: false, error: 'Not signed in' }
+        }
+
+        // Check if Dedalus API key is configured
+        const apiKey = process.env.DEDALUS_API_KEY
+        if (!apiKey || apiKey === 'your-dedalus-api-key') {
+          return {
+            ok: false,
+            error: 'Dedalus API key not configured. Please add DEDALUS_API_KEY to your .env file.',
+          }
+        }
+
+        // Read data from sheet
+        const { range: scopedRange } = ensureSheetScope(range)
+        const values = await readRange(currentSpreadsheetId, scopedRange)
+
+        if (values.length === 0) {
+          return { ok: false, error: 'No data found in range' }
+        }
+
+        // Validate column mapping
+        const validation = validateColumnMapping(values, validatedMapping)
+        if (!validation.valid) {
+          return { ok: false, error: `Invalid column mapping: ${validation.errors.join(', ')}` }
+        }
+
+        // Parse financial data
+        const parseResult = parseFinancialData(values, validatedMapping, 1) // Skip header row
+
+        if (parseResult.errors.length > 0 && parseResult.transactions.length === 0) {
+          return {
+            ok: false,
+            error: `Failed to parse data: ${parseResult.errors[0].reason} at row ${parseResult.errors[0].row}`,
+          }
+        }
+
+        if (parseResult.transactions.length === 0) {
+          return { ok: false, error: 'No valid transactions found' }
+        }
+
+        // Generate data hash for cache invalidation
+        const dataHash = generateDataHash(parseResult.transactions)
+
+        // Check cache
+        const cacheKey = `analysis:${currentSpreadsheetId}:${scopedRange}:${dataHash}`
+        const cached = insightsCache.get<AnalysisResult>(cacheKey)
+        if (cached) {
+          console.log('[ai] Using cached analysis')
+          addAudit({
+            operation: 'ai:analyze',
+            spreadsheetId: currentSpreadsheetId,
+            range: scopedRange,
+            rowCount: parseResult.transactions.length,
+            success: true,
+            message: 'Used cached analysis',
+          })
+          lastAnalysisResult = cached
+          lastDataHash = dataHash
+          return { ok: true, data: cached }
+        }
+
+        // Aggregate data (privacy-safe)
+        const summary = aggregateTransactions(parseResult.transactions)
+
+        // Call Dedalus AI
+        const dedalus = getDedalusClient(apiKey, process.env.DEDALUS_MODEL)
+        const aiResponse = await dedalus.analyzeSpendingSummary(summary, userContext)
+
+        // Prepare result
+        const result: AnalysisResult = {
+          ...aiResponse,
+          transactionCount: parseResult.transactions.length,
+          dateRange: summary.dateRange,
+        }
+
+        // Cache result (1 hour TTL)
+        insightsCache.set(cacheKey, result, 3600000, currentSpreadsheetId, dataHash)
+
+        // Store in state
+        lastAnalysisResult = result
+        lastDataHash = dataHash
+
+        addAudit({
+          operation: 'ai:analyze',
+          spreadsheetId: currentSpreadsheetId,
+          range: scopedRange,
+          rowCount: parseResult.transactions.length,
+          success: true,
+          message: `Analyzed ${parseResult.transactions.length} transactions, ${parseResult.errors.length} errors`,
+        })
+
+        return { ok: true, data: result }
+      } catch (err: any) {
+        console.error('[ai] Analysis failed:', err)
+        addAudit({
+          operation: 'ai:analyze',
+          spreadsheetId: currentSpreadsheetId,
+          range: rawRange,
+          success: false,
+          message: err.message,
+        })
+        return { ok: false, error: err.message }
+      }
+    }
+  )
+
+  // AI: Get Last Insights (cached)
+  ipcMain.handle(IPC.AI_GET_INSIGHTS, async (): Promise<IpcResult<AnalysisResult>> => {
+    if (!lastAnalysisResult) {
+      return { ok: false, error: 'No analysis available. Please analyze financial data first.' }
+    }
+    return { ok: true, data: lastAnalysisResult }
   })
 
   console.log('[ipc] all handlers registered')

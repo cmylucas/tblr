@@ -9,6 +9,7 @@
     "preview": "unset ELECTRON_RUN_AS_NODE && electron-vite preview"
   },
   "dependencies": {
+    "dedalus-labs": "^1.0.0",
     "dotenv": "^16.4.7",
     "google-auth-library": "^9.15.1",
     "googleapis": "^144.0.0",
