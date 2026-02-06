@@ -49,6 +49,11 @@ export function startWatcher(): void {
         return
       }
 
+      // If our own app is focused (user clicked the overlay), keep it visible
+      if (win.appName === 'Electron' || win.appName === 'Sheets Overlay') {
+        return
+      }
+
       if (win.appName !== 'Google Chrome') {
         hideOverlay()
         return

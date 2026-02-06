@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { randomUUID } from 'crypto'
 import { IPC, type AuditEntry, type AppStatus, type IpcResult } from './shared/types'
 import { AttachSheetInput, ReadRangeInput, WriteRangeInput } from './shared/schema'
 import { signIn, signOut, isSignedIn, getEmail, tryRestoreSession } from './auth/googleAuth'
@@ -14,7 +15,7 @@ const auditLog: AuditEntry[] = []
 function addAudit(entry: Omit<AuditEntry, 'id' | 'timestamp'>): void {
   const full: AuditEntry = {
     ...entry,
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     timestamp: new Date().toISOString(),
   }
   auditLog.unshift(full)
