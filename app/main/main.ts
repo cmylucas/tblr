@@ -8,9 +8,10 @@ dotenv.config({ path: path.join(__dirname, '../../.env') })
 import { createOverlay, registerHotkey } from './windowManager'
 import { startWatcher, stopWatcher } from './windowWatcher'
 import { registerIpcHandlers } from './ipc'
+import { isMac } from './platform'
 
 app.whenReady().then(() => {
-  console.log('[main] app ready')
+  console.log(`[main] app ready (platform: ${process.platform})`)
 
   registerIpcHandlers()
   createOverlay()
@@ -23,7 +24,8 @@ app.on('will-quit', () => {
   stopWatcher()
 })
 
-// macOS: keep app running when all windows closed
+// Keep app running when all windows closed (both mac and windows —
+// the overlay can be re-shown via hotkey or window watcher)
 app.on('window-all-closed', (e: Event) => {
   e.preventDefault()
 })

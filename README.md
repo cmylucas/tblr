@@ -1,12 +1,13 @@
 # Sheets Overlay with AI Budget Intelligence
 
-A macOS desktop overlay for Google Sheets — always-on-top, translucent, frameless. Attach a sheet by URL, authenticate via Google OAuth, then read/write ranges directly from the overlay.
+A desktop overlay for Google Sheets — always-on-top, translucent, frameless. Attach a sheet by URL, authenticate via Google OAuth, then read/write ranges directly from the overlay.
+
+**Supports macOS and Windows.**
 
 **✨ NEW: AI-Powered Budget Intelligence** — Analyze spending patterns, detect anomalies, get personalized budget recommendations, and predict future expenses using AI (powered by Dedalus Labs).
 
 ## Prerequisites
 
-- macOS (only platform supported)
 - Node.js >= 18
 - Google Chrome (overlay auto-shows when Chrome has a Google Sheets tab active)
 
@@ -21,33 +22,25 @@ cp .env.example .env
 # Edit .env with your GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and DEDALUS_API_KEY
 
 # 3. Run in development mode
-npm run dev
+npm run dev       # macOS (unsets ELECTRON_RUN_AS_NODE automatically)
+npm run dev:win   # Windows
 ```
 
-**Important:** If running from VS Code's integrated terminal, the `npm run dev` script automatically unsets `ELECTRON_RUN_AS_NODE` (which VS Code sets). If you run from an external terminal, this is not needed.
+**VS Code users:** VS Code sets `ELECTRON_RUN_AS_NODE=1` in its terminal, which breaks Electron. The `dev` script unsets it on macOS; use `dev:win` on Windows (which clears it via `set ELECTRON_RUN_AS_NODE=`).
 
 ## Google Cloud Console Setup
 
-To use OAuth sign-in and Sheets API, you need to create OAuth credentials:
-
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project (or select an existing one)
-3. Enable the **Google Sheets API**:
-   - Navigate to **APIs & Services > Library**
-   - Search for "Google Sheets API" and click **Enable**
+3. Enable the **Google Sheets API** (APIs & Services > Library)
 4. Configure the **OAuth consent screen**:
-   - Go to **APIs & Services > OAuth consent screen**
-   - Choose **External** (or Internal if using a Workspace org)
-   - Fill in app name, support email, etc.
+   - Choose **External** (or Internal for Workspace orgs)
    - Add scope: `https://www.googleapis.com/auth/spreadsheets`
-   - Add your email as a test user (required for External apps in testing mode)
-5. Create **OAuth 2.0 Client ID**:
-   - Go to **APIs & Services > Credentials**
-   - Click **Create Credentials > OAuth client ID**
+   - Add your email as a **test user**
+5. Create **OAuth 2.0 Client ID** (APIs & Services > Credentials):
    - Application type: **Desktop app** (or **Web application**)
    - If Web application: add `http://127.0.0.1:8401/callback` to **Authorized redirect URIs**
-   - Download or copy the **Client ID** and **Client secret**
-6. Paste the values into your `.env` file:
+6. Paste credentials into `.env`:
    ```
    GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
    GOOGLE_CLIENT_SECRET=your-client-secret
@@ -109,13 +102,19 @@ For AI Budget Intelligence to work, your Google Sheet should have financial tran
 
 ### Overlay Behavior
 
-- The overlay **auto-shows** when Google Chrome is the active app and the window title contains "Sheets"
-- The overlay **auto-hides** when you switch away from Chrome or to a non-Sheets tab
-- **Global hotkey:** `Cmd+Shift+Space` toggles the overlay manually
+- **Auto-shows** when Google Chrome is active with a Google Sheets tab
+- **Auto-hides** when you switch away from Chrome or to a non-Sheets tab
+- **Global hotkey:** `Cmd+Shift+Space` (macOS) / `Ctrl+Shift+Space` (Windows)
 
 ### macOS Permissions
 
-On first run, macOS may ask for **Accessibility** permissions (needed for the window watcher to detect the active app via AppleScript). Grant this in **System Settings > Privacy & Security > Accessibility**.
+macOS may request **Accessibility** permissions for the window watcher (AppleScript). Grant this in **System Settings > Privacy & Security > Accessibility**.
+
+### Windows Notes
+
+- Window detection uses PowerShell to read the foreground window. No special permissions needed.
+- If `keytar` fails to install (requires C++ build tools), token storage falls back to a JSON file in the app data directory. This is fine for development.
+- Windows Firewall may prompt for the OAuth callback server on `127.0.0.1:8401` — allow it.
 
 ## Architecture
 
@@ -158,7 +157,7 @@ app/
         AuditLog.tsx             # Last 20 operations
 ```
 
-### Key Design Decisions
+### Platform-Specific Code
 
 - **Renderer never calls Google APIs directly.** All API calls go through IPC (`contextBridge` + `ipcRenderer.invoke`).
 - **Window detection uses `osascript`** (AppleScript) instead of native Node addons, avoiding ABI compatibility issues with Electron's bundled Node.
@@ -197,8 +196,16 @@ The AI Budget Intelligence feature analyzes your financial data from Google Shee
    - "Your dining expenses increased 20% this month"
    - "⚠️ Unusual transaction detected: $500 in Entertainment (your average is $50)"
    - "💡 Reduce dining by $150/month to meet your savings goal"
+All OS-specific logic lives in `app/main/platform/`:
 
-## Known Limitations
+| Concern | macOS | Windows |
+|---------|-------|---------|
+| Window detection | AppleScript (`osascript`) | PowerShell (Win32 API) |
+| Chrome app name | `Google Chrome` | `chrome` / `chrome.exe` |
+| Overlay options | `vibrancy`, `visibleOnAllWorkspaces` | `backgroundColor: #00000000` |
+| Always-on-top level | `floating` | boolean `true` |
+| Hotkey | `Cmd+Shift+Space` | `Ctrl+Shift+Space` |
+| Token storage | keytar (Keychain) or JSON file | keytar (Credential Manager) or JSON file |
 
 - macOS only (osascript-based window detection) — **Note:** App should also work on Windows/Linux but auto-show/hide won't function
 - Chrome only (other browsers not detected)
@@ -207,12 +214,22 @@ The AI Budget Intelligence feature analyzes your financial data from Google Shee
 - No undo/redo for writes
 - Token stored in plaintext JSON (not Keychain) — acceptable for MVP
 - AI features require a Dedalus Labs API key (free tier available)
+## Packaging
+
+```bash
+npm run pack:mac   # Build + package for macOS (.dmg)
+npm run pack:win   # Build + package for Windows (.exe via NSIS)
+npm run pack       # Build + package for current platform
+```
+
+No code signing is configured. macOS will show Gatekeeper warnings; Windows will show SmartScreen warnings. This is expected for development builds.
 
 ## Scripts
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start in development mode with hot reload |
+| `npm run dev` | Dev mode (macOS) |
+| `npm run dev:win` | Dev mode (Windows) |
 | `npm run build` | Build for production |
 | `npm run preview` | Preview production build |
 
@@ -284,3 +301,14 @@ MIT
 - Google Sheets API for spreadsheet access
 - Dedalus Labs for AI infrastructure
 - Anthropic Claude for financial analysis
+| `npm run pack:mac` | Package macOS .dmg |
+| `npm run pack:win` | Package Windows .exe |
+| `npm run pack` | Package for current OS |
+
+## Known Limitations
+
+- Chrome only (other browsers not detected)
+- Attach-by-URL only (no automatic spreadsheet detection from browser)
+- No selection detection from the browser
+- No undo/redo for writes
+- Token stored in plaintext JSON when keytar unavailable
