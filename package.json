@@ -5,8 +5,12 @@
   "main": "./out/main/main.js",
   "scripts": {
     "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",
+    "dev:win": "set ELECTRON_RUN_AS_NODE= && electron-vite dev",
     "build": "electron-vite build",
-    "preview": "unset ELECTRON_RUN_AS_NODE && electron-vite preview"
+    "preview": "unset ELECTRON_RUN_AS_NODE && electron-vite preview",
+    "pack:mac": "electron-vite build && electron-builder --mac",
+    "pack:win": "electron-vite build && electron-builder --win",
+    "pack": "electron-vite build && electron-builder"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
@@ -14,15 +18,40 @@
     "googleapis": "^144.0.0",
     "zod": "^3.24.1"
   },
+  "optionalDependencies": {
+    "keytar": "^7.9.0"
+  },
   "devDependencies": {
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^28.3.3",
+    "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.7.2",
     "vite": "^5.4.11"
+  },
+  "build": {
+    "appId": "com.sheetsoverlay.app",
+    "productName": "Sheets Overlay",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false
+    }
   }
 }

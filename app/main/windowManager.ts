@@ -1,5 +1,11 @@
 import { BrowserWindow, globalShortcut, screen } from 'electron'
 import * as path from 'path'
+import {
+  TOGGLE_OVERLAY_ACCELERATOR,
+  TOGGLE_OVERLAY_LABEL,
+  getOverlayOptions,
+  applyAlwaysOnTop,
+} from './platform'
 
 let overlayWindow: BrowserWindow | null = null
 let manualToggle = false // when true, ignore auto-show/hide
@@ -10,20 +16,11 @@ export function createOverlay(): BrowserWindow {
   const winWidth = 380
   const winHeight = 620
 
-  overlayWindow = new BrowserWindow({
+  const opts = getOverlayOptions({
     width: winWidth,
     height: winHeight,
     x: screenW - winWidth - 24,
     y: Math.round((screenH - winHeight) / 2),
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: true,
-    hasShadow: true,
-    vibrancy: 'sidebar',
-    visualEffectState: 'active',
-    visibleOnAllWorkspaces: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
@@ -32,7 +29,8 @@ export function createOverlay(): BrowserWindow {
     },
   })
 
-  overlayWindow.setAlwaysOnTop(true, 'floating')
+  overlayWindow = new BrowserWindow(opts)
+  applyAlwaysOnTop(overlayWindow)
 
   // Load renderer
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -49,7 +47,7 @@ export function createOverlay(): BrowserWindow {
 }
 
 export function registerHotkey(): void {
-  globalShortcut.register('CommandOrControl+Shift+Space', () => {
+  globalShortcut.register(TOGGLE_OVERLAY_ACCELERATOR, () => {
     if (!overlayWindow) return
     if (overlayWindow.isVisible()) {
       overlayWindow.hide()
@@ -63,7 +61,7 @@ export function registerHotkey(): void {
       manualToggle = false
     }, 5000)
   })
-  console.log('[windowManager] hotkey Cmd+Shift+Space registered')
+  console.log(`[windowManager] hotkey ${TOGGLE_OVERLAY_LABEL} registered`)
 }
 
 export function showOverlay(): void {

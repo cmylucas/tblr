@@ -1,6 +1,7 @@
 import { OAuth2Client } from 'google-auth-library'
 import { shell } from 'electron'
 import * as http from 'http'
+import * as net from 'net'
 import { saveTokens, loadTokens, clearTokens } from './tokenStore'
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
@@ -8,26 +9,22 @@ const SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 let oauth2: OAuth2Client | null = null
 let userEmail: string | undefined
 
-function getRedirectPort(): number {
+function getBasePort(): number {
   return parseInt(process.env.GOOGLE_REDIRECT_PORT || '8401', 10)
 }
 
-function getRedirectUri(): string {
-  return `http://127.0.0.1:${getRedirectPort()}/callback`
-}
-
-function createClient(): OAuth2Client {
+function createClient(port: number): OAuth2Client {
   const clientId = process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET
   if (!clientId || !clientSecret) {
     throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set in .env')
   }
-  return new OAuth2Client(clientId, clientSecret, getRedirectUri())
+  return new OAuth2Client(clientId, clientSecret, `http://127.0.0.1:${port}/callback`)
 }
 
 export function getOAuth2Client(): OAuth2Client {
   if (!oauth2) {
-    oauth2 = createClient()
+    oauth2 = createClient(getBasePort())
   }
   return oauth2
 }
@@ -38,7 +35,6 @@ export async function tryRestoreSession(): Promise<boolean> {
     if (!tokens) return false
     const client = getOAuth2Client()
     client.setCredentials(tokens as any)
-    // Attempt a token refresh to check validity
     if (tokens.refresh_token) {
       const { credentials } = await client.refreshAccessToken()
       client.setCredentials(credentials)
@@ -55,7 +51,13 @@ export async function tryRestoreSession(): Promise<boolean> {
 }
 
 export async function signIn(): Promise<string | undefined> {
-  const client = getOAuth2Client()
+  // Find an available port (try base port, then base+1 .. base+4)
+  const basePort = getBasePort()
+  const port = await findAvailablePort(basePort, 5)
+
+  // Create a client with the actual port we'll listen on
+  const client = createClient(port)
+  oauth2 = client
 
   const authUrl = client.generateAuthUrl({
     access_type: 'offline',
@@ -67,7 +69,7 @@ export async function signIn(): Promise<string | undefined> {
   await shell.openExternal(authUrl)
 
   // Start local callback server
-  const code = await waitForAuthCode()
+  const code = await waitForAuthCode(port)
 
   const { tokens } = await client.getToken(code)
   client.setCredentials(tokens)
@@ -112,9 +114,31 @@ async function fetchEmail(client: OAuth2Client): Promise<void> {
   }
 }
 
-function waitForAuthCode(): Promise<string> {
+/** Try ports in [base, base+range) and return the first available one. */
+function findAvailablePort(base: number, range: number): Promise<number> {
   return new Promise((resolve, reject) => {
-    const port = getRedirectPort()
+    let tried = 0
+    function tryPort(port: number): void {
+      const srv = net.createServer()
+      srv.once('error', () => {
+        tried++
+        if (tried < range) {
+          tryPort(base + tried)
+        } else {
+          reject(new Error(`No available port in range ${base}-${base + range - 1}`))
+        }
+      })
+      srv.once('listening', () => {
+        srv.close(() => resolve(port))
+      })
+      srv.listen(port, '127.0.0.1')
+    }
+    tryPort(base)
+  })
+}
+
+function waitForAuthCode(port: number): Promise<string> {
+  return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url || '', `http://127.0.0.1:${port}`)
       const code = url.searchParams.get('code')
@@ -138,6 +162,10 @@ function waitForAuthCode(): Promise<string> {
 
       res.writeHead(404)
       res.end()
+    })
+
+    server.on('error', (err: any) => {
+      reject(new Error(`OAuth callback server failed to start: ${err.message}`))
     })
 
     server.listen(port, '127.0.0.1', () => {
