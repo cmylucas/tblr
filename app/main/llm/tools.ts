@@ -7,6 +7,7 @@ import {
   writeRange,
   clearRange,
   addSheet,
+  deleteSheet,
   renameSheet,
   reorderSheets,
   formatRange,
@@ -55,6 +56,7 @@ const WriteRangeArgs = z.object({
 
 const ClearRangeArgs = z.object({ a1Range: z.string().min(1) })
 const AddSheetArgs = z.object({ name: z.string().min(1).max(100) })
+const DeleteSheetArgs = z.object({ sheetName: z.string().min(1) })
 
 const RenameSheetArgs = z.object({
   oldName: z.string().min(1),
@@ -68,6 +70,10 @@ const FormatRangeArgs = z.object({
   bold: z.boolean().optional(),
   numberFormat: z.enum(['CURRENCY', 'PERCENT', 'DATE', 'NUMBER']).optional(),
   columnWidth: z.number().int().min(10).max(1000).optional(),
+  backgroundColor: z.string().optional(), // hex color like "#FF0000" or named like "red"
+  textColor: z.string().optional(), // hex color like "#FFFFFF"
+  borders: z.union([z.boolean(), z.enum(['all', 'outer'])]).optional(),
+  horizontalAlignment: z.enum(['LEFT', 'CENTER', 'RIGHT']).optional(),
 })
 
 // ════════════════════════════════════════════════════════════════
@@ -296,6 +302,14 @@ export const toolDefinitions: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'delete_sheet',
+      description: 'Delete a sheet tab from the spreadsheet. WARNING: This permanently removes the sheet and all its data.',
+      parameters: { type: 'object', properties: { sheetName: { type: 'string', description: 'Name of the sheet to delete' } }, required: ['sheetName'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'rename_sheet',
       description: 'Rename an existing sheet tab.',
       parameters: {
@@ -324,14 +338,18 @@ export const toolDefinitions: ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'format_range',
-      description: 'Apply formatting to a range: bold, number format (CURRENCY, PERCENT, DATE, NUMBER), or column width.',
+      description: 'Apply formatting to a range: bold, colors, borders, alignment, number format, or column width. Great for highlighting headers, adding table lines, and making data visually distinct.',
       parameters: {
         type: 'object',
         properties: {
-          a1Range: { type: 'string', description: 'A1 range to format' },
-          bold: { type: 'boolean', description: 'Set bold' },
+          a1Range: { type: 'string', description: 'A1 range to format (e.g., "Sheet1!A1:D10")' },
+          bold: { type: 'boolean', description: 'Make text bold' },
+          backgroundColor: { type: 'string', description: 'Background color (hex like "#FFFF00" or named like "yellow", "red", "green", "blue")' },
+          textColor: { type: 'string', description: 'Text color (hex like "#FF0000" or named color)' },
+          borders: { type: 'string', enum: ['all', 'outer', 'true'], description: '"all" for all borders including inner lines, "outer" for outer border only' },
+          horizontalAlignment: { type: 'string', enum: ['LEFT', 'CENTER', 'RIGHT'], description: 'Text alignment' },
           numberFormat: { type: 'string', enum: ['CURRENCY', 'PERCENT', 'DATE', 'NUMBER'], description: 'Number format' },
-          columnWidth: { type: 'number', description: 'Column width in pixels' },
+          columnWidth: { type: 'number', description: 'Column width in pixels (10-1000)' },
         },
         required: ['a1Range'],
       },
@@ -771,6 +789,11 @@ export async function executeTool(
         const res = await addSheet(spreadsheetId, args.name)
         return { result: JSON.stringify({ name: args.name, sheetId: res.sheetId }), success: true }
       }
+      case 'delete_sheet': {
+        const args = DeleteSheetArgs.parse(parsedArgs)
+        await deleteSheet(spreadsheetId, args.sheetName)
+        return { result: JSON.stringify({ sheetName: args.sheetName, deleted: true }), success: true }
+      }
       case 'rename_sheet': {
         const args = RenameSheetArgs.parse(parsedArgs)
         await renameSheet(spreadsheetId, args.oldName, args.newName)
@@ -788,6 +811,10 @@ export async function executeTool(
         if (args.bold !== undefined) spec.bold = args.bold
         if (args.numberFormat) spec.numberFormat = args.numberFormat
         if (args.columnWidth) spec.columnWidth = args.columnWidth
+        if (args.backgroundColor) spec.backgroundColor = args.backgroundColor
+        if (args.textColor) spec.textColor = args.textColor
+        if (args.borders !== undefined) spec.borders = args.borders
+        if (args.horizontalAlignment) spec.horizontalAlignment = args.horizontalAlignment
         await formatRange(spreadsheetId, range, spec)
         return { result: JSON.stringify({ range, format: spec }), success: true }
       }

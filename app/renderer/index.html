@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sheets Overlay</title>
+    <title>tblr.</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body {
@@ -15,8 +18,8 @@
       #root { width: 100%; height: 100%; }
       ::-webkit-scrollbar { width: 5px; }
       ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
-      ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+      ::-webkit-scrollbar-thumb { background: rgba(29,185,84,0.25); border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: rgba(29,185,84,0.45); }
 
       @keyframes dotPulse {
         0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
@@ -27,7 +30,7 @@
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background: rgba(255,255,255,0.7);
+        background: rgba(29,185,84,0.85);
         margin: 0 2px;
         animation: dotPulse 1.4s infinite ease-in-out both;
       }

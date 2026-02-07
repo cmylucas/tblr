@@ -13,10 +13,12 @@
     "pack": "electron-vite build && electron-builder"
   },
   "dependencies": {
+    "better-sqlite3": "^12.6.2",
     "dotenv": "^16.4.7",
     "google-auth-library": "^9.15.1",
     "googleapis": "^144.0.0",
     "openai": "^6.18.0",
+    "pdfjs-dist": "^4.4.168",
     "zod": "^3.24.1"
   },
   "optionalDependencies": {
@@ -28,6 +30,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^28.3.3",
     "electron-builder": "^25.1.8",
+    "electron-rebuild": "^3.2.9",
     "electron-vite": "^2.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -34,7 +34,7 @@ export default function MessageList({ messages, loading, loadingStatus }: Props)
           Ask me anything about your spreadsheet.
         </div>
         <div style={{ opacity: 0.25, fontSize: 11, lineHeight: 1.4, maxWidth: 260, textAlign: 'center' }}>
-          Try: "List my sheets", "Add a sheet called Dashboard", "Write headers to A1:D1"
+          Try: "List my sheets", "Summarize the data", "Create a chart from column A and B"
         </div>
       </div>
     )
@@ -56,8 +56,8 @@ export default function MessageList({ messages, loading, loadingStatus }: Props)
             <span className="thinking-dot" />
             <span className="thinking-dot" />
             <span className="thinking-dot" />
-            <span style={{ opacity: 0.5, fontSize: 11, marginLeft: 6 }}>
-              {loadingStatus === 'applying' ? 'Applying changes' : 'Thinking'}
+            <span style={{ opacity: 0.7, fontSize: 11, marginLeft: 6 }}>
+              {loadingStatus || 'Thinking...'}
             </span>
           </div>
         </div>
@@ -140,8 +140,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   userMsg: {
     alignSelf: 'flex-end',
-    background: 'rgba(10,132,255,0.2)',
-    border: '1px solid rgba(10,132,255,0.15)',
+    background: 'rgba(29,185,84,0.15)',
+    border: '1px solid rgba(29,185,84,0.12)',
     borderRadius: '12px 12px 4px 12px',
     padding: '8px 12px',
     maxWidth: '85%',

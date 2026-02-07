@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import type { AppStatus } from '../../../main/shared/types'
-import type { ModelTier } from '../App'
+import { AVAILABLE_MODELS } from '../App'
 
 const api = window.sheetsOverlay
 
@@ -8,17 +8,13 @@ interface Props {
   status: AppStatus
   onRefresh: () => void
   onError: (msg: string) => void
-  modelTier: ModelTier
-  onModelChange: (tier: ModelTier) => void
+  selectedModel: string
+  onModelChange: (modelId: string) => void
+  detectedSheetUrl: string | null
+  onDismissDetected: () => void
 }
 
-const MODEL_LABELS: Record<ModelTier, { label: string; desc: string }> = {
-  smart: { label: 'Smart', desc: 'GPT-5.2 — most capable' },
-  balanced: { label: 'Balanced', desc: 'GPT-4.1 — good balance' },
-  fast: { label: 'Fast', desc: 'GPT-4.1 Mini — quick & cheap' },
-}
-
-export default function StatusBar({ status, onRefresh, onError, modelTier, onModelChange }: Props) {
+export default function StatusBar({ status, onRefresh, onError, selectedModel, onModelChange, detectedSheetUrl, onDismissDetected }: Props) {
   const [showAttach, setShowAttach] = useState(false)
   const [showModelPicker, setShowModelPicker] = useState(false)
   const [url, setUrl] = useState('')
@@ -70,6 +66,23 @@ export default function StatusBar({ status, onRefresh, onError, modelTier, onMod
     }
   }
 
+  const handleConfirmDetected = async () => {
+    if (!detectedSheetUrl) return
+    setLoading(true)
+    try {
+      const res = await api.attachSheet(detectedSheetUrl)
+      if (!res.ok) {
+        onError(res.error ?? 'Attach failed')
+      }
+      onDismissDetected()
+      onRefresh()
+    } catch (e: any) {
+      onError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleCollapse = () => {
     api.collapseOverlay()
   }
@@ -77,6 +90,8 @@ export default function StatusBar({ status, onRefresh, onError, modelTier, onMod
   const handleQuit = () => {
     api.quitApp()
   }
+
+  const currentModelLabel = AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.label ?? 'Model'
 
   return (
     <div style={styles.container}>
@@ -102,37 +117,46 @@ export default function StatusBar({ status, onRefresh, onError, modelTier, onMod
             <span
               style={{
                 ...styles.dot,
-                background: status.signedIn ? '#2ecc40' : '#555',
-                boxShadow: status.signedIn ? '0 0 5px rgba(46,204,64,0.4)' : 'none',
+                background: status.signedIn ? '#1DB954' : '#555',
+                boxShadow: status.signedIn ? '0 0 5px rgba(29,185,84,0.4)' : 'none',
               }}
               title={status.signedIn ? `Signed in as ${status.email ?? ''}` : 'Not signed in'}
             />
             <span
               style={{
                 ...styles.dot,
-                background: status.attached ? '#0a84ff' : '#555',
-                boxShadow: status.attached ? '0 0 5px rgba(10,132,255,0.4)' : 'none',
+                background: status.attached ? '#1DB954' : '#555',
+                boxShadow: status.attached ? '0 0 5px rgba(29,185,84,0.4)' : 'none',
               }}
               title={status.attached ? 'Sheet attached' : 'No sheet'}
             />
           </div>
-          <span style={styles.title}>
-            {status.attached && status.spreadsheetTitle
-              ? status.spreadsheetTitle
-              : 'Sheets Overlay'}
-          </span>
+          {status.attached && status.spreadsheetTitle ? (
+            <span style={styles.title}>{status.spreadsheetTitle}</span>
+          ) : (
+            <span style={styles.title}>
+              <span style={styles.brandGreen}>tbl</span><span style={styles.brandWhite}>r.</span>
+            </span>
+          )}
         </div>
-        <button
-          style={{ ...styles.collapseBtn, opacity: hoverCollapse ? 0.9 : 0.45 }}
-          onMouseEnter={() => setHoverCollapse(true)}
-          onMouseLeave={() => setHoverCollapse(false)}
-          onClick={handleCollapse}
-          title="Collapse"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z" />
-          </svg>
-        </button>
+        <div style={styles.headerRight}>
+          {status.attached && status.spreadsheetTitle && (
+            <span style={styles.brandSmall}>
+              <span style={styles.brandGreenSmall}>tbl</span><span style={styles.brandWhiteSmall}>r.</span>
+            </span>
+          )}
+          <button
+            style={{ ...styles.collapseBtn, opacity: hoverCollapse ? 0.9 : 0.45 }}
+            onMouseEnter={() => setHoverCollapse(true)}
+            onMouseLeave={() => setHoverCollapse(false)}
+            onClick={handleCollapse}
+            title="Collapse"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Action row */}
@@ -150,11 +174,11 @@ export default function StatusBar({ status, onRefresh, onError, modelTier, onMod
               onClick={() => { setShowModelPicker(!showModelPicker); setShowAttach(false) }}
               style={{
                 ...styles.actionBtn,
-                background: showModelPicker ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.08)',
+                background: showModelPicker ? 'rgba(29,185,84,0.15)' : 'rgba(255,255,255,0.08)',
               }}
               title="Change AI model"
             >
-              {MODEL_LABELS[modelTier].label}
+              {currentModelLabel}
             </button>
             <button onClick={handleSignOut} disabled={loading} style={styles.actionBtnSecondary}>
               Sign out
@@ -183,20 +207,51 @@ export default function StatusBar({ status, onRefresh, onError, modelTier, onMod
       {/* Model picker */}
       {showModelPicker && (
         <div style={styles.modelPicker}>
-          {(['smart', 'balanced', 'fast'] as ModelTier[]).map((tier) => (
+          {AVAILABLE_MODELS.map((m) => (
             <button
-              key={tier}
+              key={m.id}
               style={{
                 ...styles.modelOption,
-                background: modelTier === tier ? 'rgba(10,132,255,0.2)' : 'transparent',
-                borderColor: modelTier === tier ? 'rgba(10,132,255,0.3)' : 'rgba(255,255,255,0.06)',
+                background: selectedModel === m.id ? 'rgba(29,185,84,0.15)' : 'transparent',
+                borderColor: selectedModel === m.id ? 'rgba(29,185,84,0.3)' : 'rgba(255,255,255,0.06)',
               }}
-              onClick={() => { onModelChange(tier); setShowModelPicker(false) }}
+              onClick={() => { onModelChange(m.id); setShowModelPicker(false) }}
             >
-              <span style={styles.modelLabel}>{MODEL_LABELS[tier].label}</span>
-              <span style={styles.modelDesc}>{MODEL_LABELS[tier].desc}</span>
+              <span style={styles.modelLabel}>{m.label}</span>
+              <span style={styles.modelDesc}>{m.desc}</span>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Auto-detected sheet banner */}
+      {detectedSheetUrl && !status.attached && (
+        <div style={styles.detectedBanner}>
+          <div style={styles.detectedContent}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0, color: '#1DB954' }}>
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+            </svg>
+            <span style={styles.detectedText}>
+              Sheet detected — attach it?
+            </span>
+          </div>
+          <div style={styles.detectedActions}>
+            <button
+              onClick={handleConfirmDetected}
+              disabled={loading}
+              style={styles.detectedConfirmBtn}
+            >
+              {loading ? 'Attaching...' : 'Confirm'}
+            </button>
+            <button
+              onClick={onDismissDetected}
+              style={styles.detectedDismissBtn}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -205,8 +260,8 @@ export default function StatusBar({ status, onRefresh, onError, modelTier, onMod
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    background: 'rgba(0,0,0,0.2)',
-    borderBottom: '1px solid rgba(255,255,255,0.04)',
+    background: 'rgba(0,0,0,0.25)',
+    borderBottom: '1px solid rgba(29,185,84,0.08)',
     flexShrink: 0,
   },
   headerRow: {
@@ -251,8 +306,49 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    maxWidth: 220,
+    maxWidth: 200,
+    display: 'flex',
+    alignItems: 'baseline',
   },
+  brandGreen: {
+    fontFamily: 'Lexend, -apple-system, BlinkMacSystemFont, sans-serif',
+    fontWeight: 800,
+    fontSize: 15,
+    letterSpacing: -0.5,
+    color: '#1DB954',
+  } as React.CSSProperties,
+  brandWhite: {
+    fontFamily: 'Lexend, -apple-system, BlinkMacSystemFont, sans-serif',
+    fontWeight: 800,
+    fontSize: 15,
+    letterSpacing: -0.5,
+    color: '#e0e0e0',
+  } as React.CSSProperties,
+  headerRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+  },
+  brandSmall: {
+    display: 'flex',
+    alignItems: 'baseline',
+    opacity: 0.5,
+  },
+  brandGreenSmall: {
+    fontFamily: 'Lexend, -apple-system, BlinkMacSystemFont, sans-serif',
+    fontWeight: 800,
+    fontSize: 11,
+    letterSpacing: -0.3,
+    color: '#1DB954',
+  } as React.CSSProperties,
+  brandWhiteSmall: {
+    fontFamily: 'Lexend, -apple-system, BlinkMacSystemFont, sans-serif',
+    fontWeight: 800,
+    fontSize: 11,
+    letterSpacing: -0.3,
+    color: '#e0e0e0',
+  } as React.CSSProperties,
   collapseBtn: {
     // @ts-ignore
     WebkitAppRegion: 'no-drag',
@@ -306,8 +402,8 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     padding: '6px 10px',
     borderRadius: 6,
-    border: '1px solid rgba(255,255,255,0.1)',
-    background: 'rgba(0,0,0,0.25)',
+    border: '1px solid rgba(29,185,84,0.2)',
+    background: 'rgba(0,0,0,0.3)',
     color: '#e0e0e0',
     fontSize: 11,
     outline: 'none',
@@ -316,7 +412,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '6px 12px',
     borderRadius: 6,
     border: 'none',
-    background: 'rgba(10,132,255,0.8)',
+    background: 'rgba(29,185,84,0.8)',
     color: '#fff',
     fontSize: 11,
     fontWeight: 600,
@@ -325,14 +421,16 @@ const styles: Record<string, React.CSSProperties> = {
   modelPicker: {
     display: 'flex',
     flexDirection: 'column',
-    gap: 4,
+    gap: 3,
     padding: '0 14px 8px',
+    maxHeight: 220,
+    overflowY: 'auto',
   },
   modelOption: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '6px 10px',
+    padding: '5px 10px',
     borderRadius: 6,
     border: '1px solid rgba(255,255,255,0.06)',
     cursor: 'pointer',
@@ -344,7 +442,57 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'rgba(255,255,255,0.85)',
   },
   modelDesc: {
-    fontSize: 10,
+    fontSize: 9,
     color: 'rgba(255,255,255,0.4)',
+  },
+  detectedBanner: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+    padding: '6px 14px 8px',
+    background: 'rgba(29, 185, 84, 0.08)',
+    borderTop: '1px solid rgba(29, 185, 84, 0.15)',
+  },
+  detectedContent: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+  },
+  detectedText: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: 'rgba(255,255,255,0.8)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  detectedActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+  },
+  detectedConfirmBtn: {
+    padding: '4px 12px',
+    borderRadius: 6,
+    border: 'none',
+    background: 'rgba(29, 185, 84, 0.75)',
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 700,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  },
+  detectedDismissBtn: {
+    background: 'none',
+    border: 'none',
+    color: 'rgba(255,255,255,0.4)',
+    cursor: 'pointer',
+    padding: 2,
+    display: 'flex',
+    alignItems: 'center',
   },
 }

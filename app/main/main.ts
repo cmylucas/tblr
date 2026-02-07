@@ -9,10 +9,16 @@ import { createOverlay, registerHotkey } from './windowManager'
 import { startWatcher, stopWatcher } from './windowWatcher'
 import { registerIpcHandlers } from './ipc'
 import { isMac } from './platform'
+import { initializeDatasetStore } from './datasets/datasetStore'
+import { initializeFlags } from './featureFlags'
+import { initializeTemplateStore } from './templates/templateStore'
 
 app.whenReady().then(() => {
   console.log(`[main] app ready (platform: ${process.platform})`)
 
+  initializeFlags()
+  initializeDatasetStore()
+  initializeTemplateStore()
   registerIpcHandlers()
   createOverlay()
   registerHotkey()

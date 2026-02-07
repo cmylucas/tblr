@@ -82,6 +82,31 @@ export function getActiveWindow(): Promise<ActiveWindowInfo | null> {
   return Promise.resolve(null)
 }
 
+// ── Chrome URL detection (macOS only) ──
+
+export function getChromeActiveTabUrl(): Promise<string | null> {
+  if (!isMac) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    const script = `tell application "Google Chrome" to get URL of active tab of first window`
+    exec(`osascript -e '${script}'`, { timeout: 2000 }, (err, stdout) => {
+      if (err) { resolve(null); return }
+      const url = stdout.trim()
+      resolve(url || null)
+    })
+  })
+}
+
+/**
+ * Extract a Google Sheets URL if the given URL points to docs.google.com/spreadsheets.
+ * Returns the full URL or null.
+ */
+export function extractSheetsUrl(url: string): string | null {
+  if (/docs\.google\.com\/spreadsheets\/d\/[A-Za-z0-9_-]+/.test(url)) {
+    return url
+  }
+  return null
+}
+
 // ── Detection rules ──
 
 const CHROME_NAMES_MAC = ['Google Chrome', 'Google Chrome Canary']

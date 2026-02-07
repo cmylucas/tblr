@@ -4,7 +4,11 @@ import * as http from 'http'
 import * as net from 'net'
 import { saveTokens, loadTokens, clearTokens } from './tokenStore'
 
-const SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+const SCOPES = [
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/drive.file', // Create/manage own Drive files
+  'https://www.googleapis.com/auth/drive.metadata.readonly', // Read Drive metadata
+]
 
 let oauth2: OAuth2Client | null = null
 let userEmail: string | undefined

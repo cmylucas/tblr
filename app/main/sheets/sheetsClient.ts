@@ -148,17 +148,39 @@ async function batchUpdate(spreadsheetId: string, requests: sheets_v4.Schema$Req
 
 export async function addSheet(
   spreadsheetId: string,
-  title: string
+  title: string,
+  options?: { rowCount?: number; columnCount?: number }
 ): Promise<{ sheetId: number }> {
   const api = getSheetsApi()
+  const gridProperties: any = {}
+  if (options?.rowCount) gridProperties.rowCount = options.rowCount
+  if (options?.columnCount) gridProperties.columnCount = options.columnCount
+
   const res = await api.spreadsheets.batchUpdate({
     spreadsheetId,
     requestBody: {
-      requests: [{ addSheet: { properties: { title } } }],
+      requests: [{
+        addSheet: {
+          properties: {
+            title,
+            ...(Object.keys(gridProperties).length > 0 ? { gridProperties } : {})
+          }
+        }
+      }],
     },
   })
   const sheetId = res.data.replies?.[0]?.addSheet?.properties?.sheetId ?? 0
   return { sheetId }
+}
+
+export async function deleteSheet(
+  spreadsheetId: string,
+  sheetName: string
+): Promise<void> {
+  const sheetId = await getSheetIdByName(spreadsheetId, sheetName)
+  await batchUpdate(spreadsheetId, [
+    { deleteSheet: { sheetId } },
+  ])
 }
 
 export async function renameSheet(
@@ -208,6 +230,10 @@ export interface FormatSpec {
   bold?: boolean
   numberFormat?: 'CURRENCY' | 'PERCENT' | 'DATE' | 'NUMBER'
   columnWidth?: number
+  backgroundColor?: string // hex color like "#FF0000" or named like "red"
+  textColor?: string // hex color like "#FFFFFF"
+  borders?: boolean | 'all' | 'outer' // true = all borders, 'outer' = outer only
+  horizontalAlignment?: 'LEFT' | 'CENTER' | 'RIGHT'
 }
 
 export function a1ToGridRange(a1Range: string, sheetId: number): sheets_v4.Schema$GridRange {
@@ -280,9 +306,113 @@ export async function formatRange(
     })
   }
 
+  // Background color
+  if (format.backgroundColor) {
+    const color = hexToRgb(format.backgroundColor)
+    requests.push({
+      repeatCell: {
+        range: gridRange,
+        cell: { userEnteredFormat: { backgroundColor: color } },
+        fields: 'userEnteredFormat.backgroundColor',
+      },
+    })
+  }
+
+  // Text color
+  if (format.textColor) {
+    const color = hexToRgb(format.textColor)
+    requests.push({
+      repeatCell: {
+        range: gridRange,
+        cell: { userEnteredFormat: { textFormat: { foregroundColor: color } } },
+        fields: 'userEnteredFormat.textFormat.foregroundColor',
+      },
+    })
+  }
+
+  // Horizontal alignment
+  if (format.horizontalAlignment) {
+    requests.push({
+      repeatCell: {
+        range: gridRange,
+        cell: { userEnteredFormat: { horizontalAlignment: format.horizontalAlignment } },
+        fields: 'userEnteredFormat.horizontalAlignment',
+      },
+    })
+  }
+
+  // Borders
+  if (format.borders) {
+    const borderStyle = {
+      style: 'SOLID',
+      width: 1,
+      color: { red: 0.8, green: 0.8, blue: 0.8 }, // light gray
+    }
+
+    if (format.borders === 'outer') {
+      // Only outer borders
+      requests.push({
+        updateBorders: {
+          range: gridRange,
+          top: borderStyle,
+          bottom: borderStyle,
+          left: borderStyle,
+          right: borderStyle,
+        },
+      })
+    } else {
+      // All borders (including inner)
+      requests.push({
+        updateBorders: {
+          range: gridRange,
+          top: borderStyle,
+          bottom: borderStyle,
+          left: borderStyle,
+          right: borderStyle,
+          innerHorizontal: borderStyle,
+          innerVertical: borderStyle,
+        },
+      })
+    }
+  }
+
   if (requests.length > 0) {
     await batchUpdate(spreadsheetId, requests)
   }
+}
+
+/**
+ * Convert hex color to RGB object for Google Sheets API
+ */
+function hexToRgb(hex: string): { red: number; green: number; blue: number } {
+  // Handle named colors
+  const namedColors: Record<string, string> = {
+    red: '#FF0000',
+    green: '#00FF00',
+    blue: '#0000FF',
+    yellow: '#FFFF00',
+    orange: '#FFA500',
+    purple: '#800080',
+    pink: '#FFC0CB',
+    gray: '#808080',
+    black: '#000000',
+    white: '#FFFFFF',
+  }
+
+  let color = hex.toLowerCase()
+  if (namedColors[color]) {
+    color = namedColors[color]
+  }
+
+  // Remove # if present
+  color = color.replace('#', '')
+
+  // Convert to RGB (0-1 range for Google Sheets)
+  const r = parseInt(color.substring(0, 2), 16) / 255
+  const g = parseInt(color.substring(2, 4), 16) / 255
+  const b = parseInt(color.substring(4, 6), 16) / 255
+
+  return { red: r, green: g, blue: b }
 }
 
 // ── Row / Column insert & delete ──
@@ -366,17 +496,6 @@ export async function duplicateSheet(
   })
   const newSheetId = res.data.replies?.[0]?.duplicateSheet?.properties?.sheetId ?? 0
   return { sheetId: newSheetId, name: newName }
-}
-
-// ── Color helper ──
-
-export function hexToRgb(hex: string): { red: number; green: number; blue: number } {
-  const h = hex.replace('#', '')
-  return {
-    red: parseInt(h.substring(0, 2), 16) / 255,
-    green: parseInt(h.substring(2, 4), 16) / 255,
-    blue: parseInt(h.substring(4, 6), 16) / 255,
-  }
 }
 
 // ── Conditional formatting ──

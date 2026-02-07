@@ -4,12 +4,12 @@ import { resolve } from 'path'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ['pdfjs-dist'] })],
     build: {
       outDir: 'out/main',
       rollupOptions: {
         input: resolve('app/main/main.ts'),
-        external: ['keytar', 'openai']
+        external: ['keytar', 'openai', 'canvas']
       }
     }
   },

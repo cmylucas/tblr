@@ -6,6 +6,11 @@ import { signIn, signOut, isSignedIn, getEmail, tryRestoreSession } from './auth
 import { parseSheetUrl } from './sheets/parseSheetUrl'
 import { getSpreadsheetMetadata } from './sheets/sheetsClient'
 import { runAgent } from './llm/agent'
+import { dismissDetectedUrl } from './windowWatcher'
+import { registerAttachmentHandlers } from './attachments/attachmentsIpc'
+import { registerDatasetHandlers } from './datasets/datasetsIpc'
+import { registerTemplateIpcHandlers } from './templates/templatesIpc'
+import { getOAuth2Client } from './auth/googleAuth'
 
 // ── App state ──
 
@@ -13,6 +18,11 @@ let currentSpreadsheetId: string | undefined
 let currentSpreadsheetTitle: string | undefined
 let currentSheetNames: string[] = []
 const auditLog: AuditEntry[] = []
+let chatAbortController: AbortController | null = null
+
+export function isSheetAttached(): boolean {
+  return !!currentSpreadsheetId
+}
 
 function addAudit(entry: Omit<AuditEntry, 'id' | 'timestamp'>): void {
   const full: AuditEntry = {
@@ -103,6 +113,11 @@ export function registerIpcHandlers(): void {
     app.quit()
   })
 
+  // ── Dismiss detected sheet URL ──
+  ipcMain.on('sheet:dismiss', (_e, url: string) => {
+    dismissDetectedUrl(url)
+  })
+
   ipcMain.handle(
     IPC.CHAT_SEND,
     async (_e, history: ChatMessage[], userText: string, modelTier?: string): Promise<IpcResult<ChatResponse>> => {
@@ -112,16 +127,14 @@ export function registerIpcHandlers(): void {
           { role: 'user', content: userText },
         ]
 
-        const tier = (modelTier === 'smart' || modelTier === 'balanced' || modelTier === 'fast')
-          ? modelTier
-          : 'smart'
-
         const sender = _e.sender
         const onProgress = (status: string) => {
           try { sender.send('chat:progress', status) } catch { /* window may have closed */ }
         }
 
-        const response = await runAgent(fullHistory, currentSpreadsheetId, currentSheetNames, tier, onProgress)
+        chatAbortController = new AbortController()
+        const response = await runAgent(fullHistory, currentSpreadsheetId, currentSheetNames, modelTier || undefined, onProgress, chatAbortController.signal)
+        chatAbortController = null
 
         // Log actions to audit
         for (const action of response.actions) {
@@ -148,12 +161,47 @@ export function registerIpcHandlers(): void {
 
         return { ok: true, data: response }
       } catch (err: any) {
+        chatAbortController = null
+        if (err.name === 'AbortError') {
+          return { ok: true, data: { message: '(Stopped by user.)', actions: [] } }
+        }
         console.error('[chat] error:', err)
         addAudit({ operation: 'chat', success: false, message: err.message })
         return { ok: false, error: err.message }
       }
     }
   )
+
+  ipcMain.on('chat:abort', () => {
+    if (chatAbortController) {
+      console.log('[chat] aborting agent')
+      chatAbortController.abort()
+      chatAbortController = null
+    }
+  })
+
+  // ── Attachments ──
+  registerAttachmentHandlers(
+    addAudit,
+    () => currentSpreadsheetId,
+    () => currentSheetNames
+  )
+
+  // ── Datasets ──
+  registerDatasetHandlers(
+    addAudit,
+    () => currentSpreadsheetId,
+    () => currentSheetNames
+  )
+
+  // ── Templates ──
+  registerTemplateIpcHandlers(() => {
+    try {
+      return isSignedIn() ? getOAuth2Client() : null
+    } catch {
+      return null
+    }
+  })
 
   console.log('[ipc] all handlers registered')
 }

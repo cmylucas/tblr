@@ -106,10 +106,10 @@ function createPill(): void {
     justify-content: center;
     cursor: pointer;
     transition: background 0.15s;
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid rgba(29,185,84,0.15);
   }
-  .pill:hover { background: rgba(58, 58, 62, 0.95); }
-  .pill svg { width: 16px; height: 16px; fill: rgba(255,255,255,0.7); }
+  .pill:hover { background: rgba(29, 185, 84, 0.15); }
+  .pill svg { width: 16px; height: 16px; fill: rgba(29,185,84,0.8); }
 </style>
 </head>
 <body>
