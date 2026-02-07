@@ -7,11 +7,17 @@ const api = {
   attachSheet: (url: string) => ipcRenderer.invoke(IPC.ATTACH_SHEET, url),
   signIn: () => ipcRenderer.invoke(IPC.SIGN_IN),
   signOut: () => ipcRenderer.invoke(IPC.SIGN_OUT),
-  readRange: (range: string) => ipcRenderer.invoke(IPC.READ_RANGE, range),
-  writeRange: (range: string, rawText: string) =>
-    ipcRenderer.invoke(IPC.WRITE_RANGE, range, rawText),
+  sendChat: (history: any[], userText: string, modelTier?: string) =>
+    ipcRenderer.invoke(IPC.CHAT_SEND, history, userText, modelTier),
   // Window control
   collapseOverlay: () => ipcRenderer.send('overlay:collapse'),
+  quitApp: () => ipcRenderer.send('app:quit'),
+  // Chat progress events
+  onChatProgress: (cb: (status: string) => void) => {
+    const handler = (_e: any, status: string) => cb(status)
+    ipcRenderer.on('chat:progress', handler)
+    return () => { ipcRenderer.removeListener('chat:progress', handler) }
+  },
 }
 
 contextBridge.exposeInMainWorld('sheetsOverlay', api)

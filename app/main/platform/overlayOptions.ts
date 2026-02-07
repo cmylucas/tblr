@@ -3,8 +3,8 @@ import { isMac } from './os'
 
 /**
  * Returns platform-specific BrowserWindow options for the overlay.
- * Mac gets vibrancy + visibleOnAllWorkspaces; Windows gets a solid
- * semi-transparent background (true transparency is unreliable on Win).
+ * We use transparent:true so the CSS rgba backgrounds show the desktop through.
+ * No vibrancy — it creates an opaque fill that blocks true translucency.
  */
 export function getOverlayOptions(
   base: BrowserWindowConstructorOptions
@@ -16,28 +16,23 @@ export function getOverlayOptions(
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: true,
-    hasShadow: true,
+    hasShadow: false,
+    backgroundColor: '#00000000',
   }
 
   if (isMac) {
     return {
       ...shared,
-      vibrancy: 'sidebar',
-      visualEffectState: 'active',
       visibleOnAllWorkspaces: true,
+      // No vibrancy — it overrides transparency with an opaque fill
     }
   }
 
-  // Windows: transparent works but can be flaky; provide a fallback bg color
-  return {
-    ...shared,
-    backgroundColor: '#00000000',
-  }
+  return shared
 }
 
 /**
  * Platform-specific alwaysOnTop level.
- * Mac supports 'floating'; Windows only supports boolean.
  */
 export function applyAlwaysOnTop(win: Electron.BrowserWindow): void {
   if (isMac) {

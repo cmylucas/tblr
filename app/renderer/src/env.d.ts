@@ -1,14 +1,15 @@
-import type { IpcResult, AppStatus, AuditEntry } from '../../main/shared/types'
+import type { IpcResult, AppStatus, AuditEntry, ChatMessage, ChatResponse } from '../../main/shared/types'
 
 interface SheetsOverlayAPI {
   getStatus(): Promise<IpcResult<AppStatus>>
   getAuditLog(): Promise<IpcResult<AuditEntry[]>>
-  attachSheet(url: string): Promise<IpcResult<{ spreadsheetId: string; sheetNames: string[] }>>
+  attachSheet(url: string): Promise<IpcResult<{ spreadsheetId: string; title: string; sheetNames: string[] }>>
   signIn(): Promise<IpcResult<string>>
   signOut(): Promise<IpcResult>
-  readRange(range: string): Promise<IpcResult<string[][]>>
-  writeRange(range: string, rawText: string): Promise<IpcResult>
+  sendChat(history: ChatMessage[], userText: string, modelTier?: string): Promise<IpcResult<ChatResponse>>
   collapseOverlay(): void
+  quitApp(): void
+  onChatProgress(cb: (status: string) => void): () => void
 }
 
 declare global {

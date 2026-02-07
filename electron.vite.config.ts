@@ -9,7 +9,7 @@ export default defineConfig({
       outDir: 'out/main',
       rollupOptions: {
         input: resolve('app/main/main.ts'),
-        external: ['keytar']
+        external: ['keytar', 'openai']
       }
     }
   },

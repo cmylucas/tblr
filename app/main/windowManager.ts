@@ -32,8 +32,7 @@ export function createOverlay(): BrowserWindow {
     },
   })
 
-  // Override hasShadow to remove the white border
-  overlayWindow = new BrowserWindow({ ...baseOpts, hasShadow: false })
+  overlayWindow = new BrowserWindow(baseOpts)
   applyAlwaysOnTop(overlayWindow)
 
   // Load renderer
@@ -118,8 +117,10 @@ function createPill(): void {
     <svg viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>
   </div>
   <script>
+    var clickCount = 0;
     document.getElementById('btn').addEventListener('click', function() {
-      document.title = 'expand-overlay';
+      clickCount++;
+      document.title = 'expand-' + clickCount;
     });
   </script>
 </body>
@@ -127,9 +128,9 @@ function createPill(): void {
 
   pillWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(pillHtml)}`)
 
-  // Listen for pill click via title change (works without nodeIntegration)
+  // Listen for pill click via title change — each click produces a unique title
   pillWindow.on('page-title-updated', (_event, title) => {
-    if (title === 'expand-overlay') {
+    if (title.startsWith('expand-')) {
       manualHide = false
       showOverlayAndHidePill()
     }

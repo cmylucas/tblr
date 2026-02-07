@@ -1,14 +1,16 @@
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
-import { IPC, type AuditEntry, type AppStatus, type IpcResult } from './shared/types'
-import { AttachSheetInput, ReadRangeInput, WriteRangeInput } from './shared/schema'
+import { IPC, type AuditEntry, type AppStatus, type IpcResult, type ChatMessage, type ChatResponse } from './shared/types'
+import { AttachSheetInput } from './shared/schema'
 import { signIn, signOut, isSignedIn, getEmail, tryRestoreSession } from './auth/googleAuth'
 import { parseSheetUrl } from './sheets/parseSheetUrl'
-import { getSpreadsheetMetadata, readRange, writeRange } from './sheets/sheetsClient'
+import { getSpreadsheetMetadata } from './sheets/sheetsClient'
+import { runAgent } from './llm/agent'
 
 // ── App state ──
 
 let currentSpreadsheetId: string | undefined
+let currentSpreadsheetTitle: string | undefined
 let currentSheetNames: string[] = []
 const auditLog: AuditEntry[] = []
 
@@ -19,27 +21,13 @@ function addAudit(entry: Omit<AuditEntry, 'id' | 'timestamp'>): void {
     timestamp: new Date().toISOString(),
   }
   auditLog.unshift(full)
-  if (auditLog.length > 20) auditLog.length = 20
+  if (auditLog.length > 100) auditLog.length = 100
   console.log(`[audit] ${full.operation} ok=${full.success} ${full.message ?? ''}`)
-}
-
-/**
- * If range has no "!" (no sheet scope), prefix with the first sheet name.
- * Returns { range, warned } — warned is true if we defaulted.
- */
-function ensureSheetScope(range: string): { range: string; warned: boolean } {
-  if (range.includes('!')) return { range, warned: false }
-  if (currentSheetNames.length > 0) {
-    const scoped = `${currentSheetNames[0]}!${range}`
-    return { range: scoped, warned: true }
-  }
-  return { range, warned: false }
 }
 
 // ── Handlers ──
 
 export function registerIpcHandlers(): void {
-  // Try restoring session on startup
   tryRestoreSession().catch(() => {})
 
   ipcMain.handle(IPC.GET_STATUS, async (): Promise<IpcResult<AppStatus>> => {
@@ -50,6 +38,7 @@ export function registerIpcHandlers(): void {
         email: getEmail(),
         attached: !!currentSpreadsheetId,
         spreadsheetId: currentSpreadsheetId,
+        spreadsheetTitle: currentSpreadsheetTitle,
         sheetNames: currentSheetNames,
       },
     }
@@ -59,7 +48,7 @@ export function registerIpcHandlers(): void {
     return { ok: true, data: auditLog }
   })
 
-  ipcMain.handle(IPC.ATTACH_SHEET, async (_e, rawUrl: string): Promise<IpcResult<{ spreadsheetId: string; sheetNames: string[] }>> => {
+  ipcMain.handle(IPC.ATTACH_SHEET, async (_e, rawUrl: string): Promise<IpcResult<{ spreadsheetId: string; title: string; sheetNames: string[] }>> => {
     try {
       const { url } = AttachSheetInput.parse({ url: rawUrl })
       const { spreadsheetId } = parseSheetUrl(url)
@@ -71,10 +60,11 @@ export function registerIpcHandlers(): void {
 
       const meta = await getSpreadsheetMetadata(spreadsheetId)
       currentSpreadsheetId = spreadsheetId
+      currentSpreadsheetTitle = meta.title
       currentSheetNames = meta.sheetNames
 
       addAudit({ operation: 'attach', spreadsheetId, success: true, message: `"${meta.title}" — ${meta.sheetNames.length} sheets` })
-      return { ok: true, data: { spreadsheetId, sheetNames: meta.sheetNames } }
+      return { ok: true, data: { spreadsheetId, title: meta.title, sheetNames: meta.sheetNames } }
     } catch (err: any) {
       addAudit({ operation: 'attach', success: false, message: err.message })
       return { ok: false, error: err.message }
@@ -96,6 +86,7 @@ export function registerIpcHandlers(): void {
     try {
       await signOut()
       currentSpreadsheetId = undefined
+      currentSpreadsheetTitle = undefined
       currentSheetNames = []
       addAudit({ operation: 'signOut', success: true })
       return { ok: true }
@@ -105,67 +96,64 @@ export function registerIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC.READ_RANGE, async (_e, rawRange: string): Promise<IpcResult<string[][]>> => {
-    try {
-      const { range: parsedRange } = ReadRangeInput.parse({ range: rawRange })
-      if (!currentSpreadsheetId) {
-        return { ok: false, error: 'No sheet attached' }
-      }
-      if (!isSignedIn()) {
-        return { ok: false, error: 'Not signed in' }
-      }
+  // ── Chat ──
 
-      const { range, warned } = ensureSheetScope(parsedRange)
-      if (warned) {
-        addAudit({ operation: 'read', spreadsheetId: currentSpreadsheetId, range, success: true, message: `Defaulted to sheet "${currentSheetNames[0]}"` })
-      }
-
-      const values = await readRange(currentSpreadsheetId, range)
-      const rows = values.length
-      const cols = values[0]?.length ?? 0
-      addAudit({ operation: 'read', spreadsheetId: currentSpreadsheetId, range, rowCount: rows, colCount: cols, success: true })
-      return { ok: true, data: values }
-    } catch (err: any) {
-      addAudit({ operation: 'read', spreadsheetId: currentSpreadsheetId, range: rawRange, success: false, message: err.message })
-      return { ok: false, error: err.message }
-    }
+  // ── Quit ──
+  ipcMain.on('app:quit', () => {
+    app.quit()
   })
 
-  ipcMain.handle(IPC.WRITE_RANGE, async (_e, rawRange: string, rawText: string): Promise<IpcResult> => {
-    try {
-      const { range: parsedRange, rawText: text } = WriteRangeInput.parse({ range: rawRange, rawText })
-      if (!currentSpreadsheetId) {
-        return { ok: false, error: 'No sheet attached' }
-      }
-      if (!isSignedIn()) {
-        return { ok: false, error: 'Not signed in' }
-      }
+  ipcMain.handle(
+    IPC.CHAT_SEND,
+    async (_e, history: ChatMessage[], userText: string, modelTier?: string): Promise<IpcResult<ChatResponse>> => {
+      try {
+        const fullHistory: ChatMessage[] = [
+          ...history,
+          { role: 'user', content: userText },
+        ]
 
-      const { range, warned } = ensureSheetScope(parsedRange)
-      if (warned) {
-        addAudit({ operation: 'write', spreadsheetId: currentSpreadsheetId, range, success: true, message: `Defaulted to sheet "${currentSheetNames[0]}"` })
+        const tier = (modelTier === 'smart' || modelTier === 'balanced' || modelTier === 'fast')
+          ? modelTier
+          : 'smart'
+
+        const sender = _e.sender
+        const onProgress = (status: string) => {
+          try { sender.send('chat:progress', status) } catch { /* window may have closed */ }
+        }
+
+        const response = await runAgent(fullHistory, currentSpreadsheetId, currentSheetNames, tier, onProgress)
+
+        // Log actions to audit
+        for (const action of response.actions) {
+          addAudit({
+            operation: `tool:${action.tool}`,
+            spreadsheetId: currentSpreadsheetId,
+            success: action.success,
+            message: action.success
+              ? `${action.tool}(${JSON.stringify(action.args).substring(0, 80)})`
+              : action.result.substring(0, 100),
+          })
+        }
+
+        // Refresh sheet names after any modifications
+        if (currentSpreadsheetId && response.actions.some((a) => a.success)) {
+          try {
+            const meta = await getSpreadsheetMetadata(currentSpreadsheetId)
+            currentSheetNames = meta.sheetNames
+            currentSpreadsheetTitle = meta.title
+          } catch {
+            // non-critical
+          }
+        }
+
+        return { ok: true, data: response }
+      } catch (err: any) {
+        console.error('[chat] error:', err)
+        addAudit({ operation: 'chat', success: false, message: err.message })
+        return { ok: false, error: err.message }
       }
-
-      // Parse TSV/CSV: rows are newline-separated, cols tab-separated (or comma if no tabs)
-      const rows = text.split('\n').filter((r) => r.length > 0)
-      const hasTabs = rows.some((r) => r.includes('\t'))
-      const values = rows.map((r) => r.split(hasTabs ? '\t' : ','))
-
-      const result = await writeRange(currentSpreadsheetId, range, values)
-      addAudit({
-        operation: 'write',
-        spreadsheetId: currentSpreadsheetId,
-        range,
-        rowCount: result.updatedRows,
-        colCount: result.updatedColumns,
-        success: true,
-      })
-      return { ok: true, data: result }
-    } catch (err: any) {
-      addAudit({ operation: 'write', spreadsheetId: currentSpreadsheetId, range: rawRange, success: false, message: err.message })
-      return { ok: false, error: err.message }
     }
-  })
+  )
 
   console.log('[ipc] all handlers registered')
 }
