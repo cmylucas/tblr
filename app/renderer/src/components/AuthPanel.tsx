@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import type { AppStatus } from '../../../main/shared/types'
-import { sectionStyle, btnStyle, labelStyle } from './styles'
+import { sectionStyle, btnStyle, btnPrimaryStyle, labelStyle } from './styles'
 
 const api = window.sheetsOverlay
 
@@ -40,17 +40,17 @@ export default function AuthPanel({ status, onAction, onError }: Props) {
 
   return (
     <div style={sectionStyle}>
-      <div style={labelStyle}>Auth</div>
+      <div style={labelStyle}>Account</div>
       {status.signedIn ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, opacity: 0.8 }}>{status.email ?? 'Signed in'}</span>
+          <span style={{ fontSize: 12, opacity: 0.7, flex: 1 }}>{status.email ?? 'Signed in'}</span>
           <button onClick={handleSignOut} disabled={loading} style={btnStyle}>
             Sign out
           </button>
         </div>
       ) : (
-        <button onClick={handleSignIn} disabled={loading} style={btnStyle}>
-          {loading ? 'Signing in…' : 'Sign in with Google'}
+        <button onClick={handleSignIn} disabled={loading} style={{ ...btnPrimaryStyle, width: '100%' }}>
+          {loading ? 'Signing in...' : 'Sign in with Google'}
         </button>
       )}
     </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { sectionStyle, btnStyle, inputStyle, labelStyle } from './styles'
+import { sectionStyle, btnPrimaryStyle, inputStyle, labelStyle } from './styles'
 
 const api = window.sheetsOverlay
 
@@ -42,8 +42,8 @@ export default function ReadRange({ onAction, onError }: Props) {
           onChange={(e) => setRange(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleRead()}
         />
-        <button onClick={handleRead} disabled={loading} style={btnStyle}>
-          {loading ? '…' : 'Read'}
+        <button onClick={handleRead} disabled={loading} style={btnPrimaryStyle}>
+          {loading ? '...' : 'Read'}
         </button>
       </div>
       {data && data.length > 0 && (
@@ -64,7 +64,7 @@ export default function ReadRange({ onAction, onError }: Props) {
         </div>
       )}
       {data && data.length === 0 && (
-        <div style={{ fontSize: 11, opacity: 0.6 }}>No data in range.</div>
+        <div style={{ fontSize: 11, opacity: 0.5 }}>No data in range.</div>
       )}
     </div>
   )
@@ -77,7 +77,7 @@ const tableStyle: React.CSSProperties = {
 }
 
 const cellStyle: React.CSSProperties = {
-  border: '1px solid rgba(255,255,255,0.12)',
+  border: '1px solid rgba(255,255,255,0.06)',
   padding: '3px 6px',
   whiteSpace: 'nowrap',
   maxWidth: 120,

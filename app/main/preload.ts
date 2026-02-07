@@ -10,6 +10,8 @@ const api = {
   readRange: (range: string) => ipcRenderer.invoke(IPC.READ_RANGE, range),
   writeRange: (range: string, rawText: string) =>
     ipcRenderer.invoke(IPC.WRITE_RANGE, range, rawText),
+  // Window control
+  collapseOverlay: () => ipcRenderer.send('overlay:collapse'),
 }
 
 contextBridge.exposeInMainWorld('sheetsOverlay', api)

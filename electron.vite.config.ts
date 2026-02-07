@@ -8,7 +8,8 @@ export default defineConfig({
     build: {
       outDir: 'out/main',
       rollupOptions: {
-        input: resolve('app/main/main.ts')
+        input: resolve('app/main/main.ts'),
+        external: ['keytar']
       }
     }
   },

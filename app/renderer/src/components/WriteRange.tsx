@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { sectionStyle, btnStyle, inputStyle, labelStyle, textareaStyle } from './styles'
+import { sectionStyle, btnPrimaryStyle, inputStyle, labelStyle, textareaStyle } from './styles'
 
 const api = window.sheetsOverlay
 
@@ -51,8 +51,8 @@ export default function WriteRange({ onAction, onError }: Props) {
         rows={3}
       />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-        <button onClick={handleWrite} disabled={loading} style={btnStyle}>
-          {loading ? '…' : 'Write'}
+        <button onClick={handleWrite} disabled={loading} style={btnPrimaryStyle}>
+          {loading ? '...' : 'Write'}
         </button>
         {success && <span style={{ fontSize: 11, color: '#2ecc40' }}>Written!</span>}
       </div>

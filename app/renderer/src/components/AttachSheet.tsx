@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import type { AppStatus } from '../../../main/shared/types'
-import { sectionStyle, btnStyle, inputStyle, labelStyle } from './styles'
+import { sectionStyle, btnPrimaryStyle, inputStyle, labelStyle } from './styles'
 
 const api = window.sheetsOverlay
 
@@ -41,12 +41,12 @@ export default function AttachSheet({ status, onAction, onError }: Props) {
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAttach()}
         />
-        <button onClick={handleAttach} disabled={loading} style={btnStyle}>
-          {loading ? '…' : 'Attach'}
+        <button onClick={handleAttach} disabled={loading} style={btnPrimaryStyle}>
+          {loading ? '...' : 'Attach'}
         </button>
       </div>
       {status.attached && (
-        <div style={{ fontSize: 11, opacity: 0.7 }}>
+        <div style={{ fontSize: 10, opacity: 0.5, lineHeight: 1.5 }}>
           <div>ID: {status.spreadsheetId}</div>
           {status.sheetNames && status.sheetNames.length > 0 && (
             <div>Sheets: {status.sheetNames.join(', ')}</div>

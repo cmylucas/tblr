@@ -8,6 +8,7 @@ interface SheetsOverlayAPI {
   signOut(): Promise<IpcResult>
   readRange(range: string): Promise<IpcResult<string[][]>>
   writeRange(range: string, rawText: string): Promise<IpcResult>
+  collapseOverlay(): void
 }
 
 declare global {
