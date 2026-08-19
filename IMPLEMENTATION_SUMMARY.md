@@ -1,7 +1,9 @@
 # Files/Datasets Tab Implementation Summary
 
+Hackathon implementation notes from **TartanHacks 2026**. The [README](README.md) is the project overview.
+
 ## Overview
-Successfully implemented a complete Files/Datasets tab feature with SEC EDGAR integration for the Electron (electron-vite) + React + TypeScript overlay app.
+Files/Datasets tab with SEC EDGAR integration for the Electron (electron-vite) + React + TypeScript overlay app.
 
 ---
 

@@ -1,5 +1,7 @@
 # Demo Guide: Files/Datasets Tab with SEC EDGAR Integration
 
+Internal notes from **TartanHacks 2026**. For setup and product overview, see [README.md](README.md).
+
 ## Quick Start
 
 ### 1. Setup Environment Variables
@@ -18,7 +20,6 @@ OPENROUTER_API_KEY=sk-or-...
 ### 2. Run the App
 
 ```bash
-cd TartanHacks-2026
 npm run dev
 ```
 

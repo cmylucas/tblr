@@ -1,131 +1,75 @@
-# Sheets Overlay
+# tblr
 
-A desktop overlay for Google Sheets — always-on-top, translucent, frameless. Attach a sheet by URL, authenticate via Google OAuth, then read/write ranges directly from the overlay.
+Always-on-top overlay for Google Sheets. Sign in with Google, attach a spreadsheet by URL, then chat with an LLM that can read and write the sheet, import datasets, and pull structured company data from SEC EDGAR.
 
-**Supports macOS and Windows.**
+Built at **[TartanHacks 2026](https://www.tartanhacks.com/)** (theme: Mosaic) as a 24-hour prototype. macOS and Windows.
+
+The name is a nod to tables — a desktop layer over the spreadsheet you already have open.
+
+## What it does
+
+- **Overlay** — frameless, translucent window that auto-shows when Chrome is on a Google Sheets tab
+- **Sheets API** — attach a sheet by URL; read/write ranges; audit log of recent operations
+- **Chat agent** — OpenRouter-backed LLM with tools for sheets (ranges, formatting, charts, pivots, filters)
+- **Datasets** — upload CSV/TSV, or drop a 10-K PDF and fetch official XBRL companyfacts from SEC EDGAR instead of scraping tables
+- **Import** — write a dataset into a new sheet tab with header formatting, freeze, and filter
+
+Typical demo: upload a 10-K PDF → auto-detect ticker/CIK → store ~tens of thousands of fact rows → ask the agent to build a revenue trend in the attached spreadsheet.
 
 ## Prerequisites
 
 - Node.js >= 18
-- Google Chrome (overlay auto-shows when Chrome has a Google Sheets tab active)
+- Google Chrome (window detection is Chrome-only)
+- Google Cloud OAuth credentials (Sheets API)
+- OpenRouter API key
 
-## Quick Start
+## Quick start
 
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Copy .env.example to .env and fill in your Google OAuth credentials
-cp .env.example .env   # macOS/Linux
-# copy .env.example .env   # Windows cmd
-
-# 3. Run in development mode
-npm run dev       # macOS (unsets ELECTRON_RUN_AS_NODE automatically)
-npm run dev:win   # Windows
+cp .env.example .env   # then fill in credentials
+npm run dev            # macOS
+npm run dev:win        # Windows
 ```
 
-**VS Code users:** VS Code sets `ELECTRON_RUN_AS_NODE=1` in its terminal, which breaks Electron. The `dev` script unsets it on macOS; use `dev:win` on Windows (which clears it via `set ELECTRON_RUN_AS_NODE=`).
+VS Code sets `ELECTRON_RUN_AS_NODE=1`, which breaks Electron. The `dev` / `dev:win` scripts clear it.
 
-## Google Cloud Console Setup
+### `.env`
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or select an existing one)
-3. Enable the **Google Sheets API** (APIs & Services > Library)
-4. Configure the **OAuth consent screen**:
-   - Choose **External** (or Internal for Workspace orgs)
-   - Add scope: `https://www.googleapis.com/auth/spreadsheets`
-   - Add your email as a **test user**
-5. Create **OAuth 2.0 Client ID** (APIs & Services > Credentials):
-   - Application type: **Desktop app** (or **Web application**)
-   - If Web application: add `http://127.0.0.1:8401/callback` to **Authorized redirect URIs**
-6. Paste credentials into `.env`:
-   ```
-   GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-   GOOGLE_CLIENT_SECRET=your-client-secret
-   GOOGLE_REDIRECT_PORT=8401
-   ```
+```
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REDIRECT_PORT=8401
+OPENROUTER_API_KEY=your-openrouter-key
+```
+
+Do not commit `.env`. `.env.example` is the template.
+
+### Google Cloud Console
+
+1. Create a project at [Google Cloud Console](https://console.cloud.google.com/)
+2. Enable the **Google Sheets API**
+3. Configure the OAuth consent screen (External is fine). Add scope `https://www.googleapis.com/auth/spreadsheets` and your email as a test user
+4. Create an OAuth client (Desktop app, or Web application with redirect `http://127.0.0.1:8401/callback`)
+5. Paste the client ID and secret into `.env`
+
+OpenRouter keys: [openrouter.ai/keys](https://openrouter.ai/keys)
 
 ## Usage
 
-1. **Launch** with `npm run dev` (macOS) or `npm run dev:win` (Windows)
-2. The overlay appears in the top-right of your screen
-3. **Sign in** — opens your browser for Google OAuth
-4. **Attach a sheet** — paste a Google Sheets URL
-5. **Read** — enter an A1 range (e.g. `Sheet1!A1:D10`)
-6. **Write** — enter a range + paste TSV/CSV data
-7. **Audit Log** shows the last 20 operations
+1. Launch with `npm run dev` (or `dev:win`)
+2. Overlay appears top-right
+3. **Sign in** — browser OAuth
+4. **Attach** a Google Sheets URL
+5. **Chat** — ask for summaries, new tabs, charts, or imports
+6. **Files** — upload CSV/TSV or SEC PDFs; preview, attach to chat, or import to the sheet
+7. **Logs** — last 20 operations
 
-### Overlay Behavior
+**Hotkey:** `Cmd+Shift+Space` (macOS) / `Ctrl+Shift+Space` (Windows)
 
-- **Auto-shows** when Google Chrome is active with a Google Sheets tab
-- **Auto-hides** when you switch away from Chrome or to a non-Sheets tab
-- **Global hotkey:** `Cmd+Shift+Space` (macOS) / `Ctrl+Shift+Space` (Windows)
+**macOS:** grant Accessibility for the AppleScript window watcher (System Settings → Privacy & Security → Accessibility).
 
-### macOS Permissions
-
-macOS may request **Accessibility** permissions for the window watcher (AppleScript). Grant this in **System Settings > Privacy & Security > Accessibility**.
-
-### Windows Notes
-
-- Window detection uses PowerShell to read the foreground window. No special permissions needed.
-- If `keytar` fails to install (requires C++ build tools), token storage falls back to a JSON file in the app data directory. This is fine for development.
-- Windows Firewall may prompt for the OAuth callback server on `127.0.0.1:8401` — allow it.
-
-## Architecture
-
-```
-app/
-  main/
-    main.ts                # Entry point
-    ipc.ts                 # IPC handlers
-    windowManager.ts       # Overlay window + hotkey
-    windowWatcher.ts       # Active window polling
-    platform/              # Cross-platform abstraction
-      index.ts             # Re-exports
-      os.ts                # isMac, isWindows helpers
-      hotkeys.ts           # Platform-specific accelerators
-      windowRules.ts       # Active window detection (osascript / PowerShell)
-      overlayOptions.ts    # BrowserWindow options per OS
-    auth/
-      googleAuth.ts        # OAuth2 flow + token management
-      tokenStore.ts        # keytar (optional) + JSON file fallback
-    sheets/
-      sheetsClient.ts      # Google Sheets API wrappers
-      parseSheetUrl.ts     # URL parsing
-    shared/
-      types.ts             # IPC types
-      schema.ts            # Zod schemas
-    preload.ts             # contextBridge
-  renderer/
-    index.html
-    src/
-      main.tsx
-      App.tsx
-      components/          # OverlayShell, AuthPanel, AttachSheet, etc.
-```
-
-### Platform-Specific Code
-
-All OS-specific logic lives in `app/main/platform/`:
-
-| Concern | macOS | Windows |
-|---------|-------|---------|
-| Window detection | AppleScript (`osascript`) | PowerShell (Win32 API) |
-| Chrome app name | `Google Chrome` | `chrome` / `chrome.exe` |
-| Overlay options | `vibrancy`, `visibleOnAllWorkspaces` | `backgroundColor: #00000000` |
-| Always-on-top level | `floating` | boolean `true` |
-| Hotkey | `Cmd+Shift+Space` | `Ctrl+Shift+Space` |
-| Token storage | keytar (Keychain) or JSON file | keytar (Credential Manager) or JSON file |
-
-## Packaging
-
-```bash
-npm run pack:mac   # Build + package for macOS (.dmg)
-npm run pack:win   # Build + package for Windows (.exe via NSIS)
-npm run pack       # Build + package for current platform
-```
-
-No code signing is configured. macOS will show Gatekeeper warnings; Windows will show SmartScreen warnings. This is expected for development builds.
+**Windows:** foreground-window detection uses PowerShell. If `keytar` fails to install (needs C++ build tools), OAuth tokens fall back to a JSON file in the app data directory.
 
 ## Scripts
 
@@ -133,15 +77,23 @@ No code signing is configured. macOS will show Gatekeeper warnings; Windows will
 |---------|-------------|
 | `npm run dev` | Dev mode (macOS) |
 | `npm run dev:win` | Dev mode (Windows) |
-| `npm run build` | Build for production |
-| `npm run pack:mac` | Package macOS .dmg |
-| `npm run pack:win` | Package Windows .exe |
-| `npm run pack` | Package for current OS |
+| `npm run build` | Production build |
+| `npm run pack:mac` | Package `.dmg` |
+| `npm run pack:win` | Package `.exe` (NSIS) |
+| `npm run pack` | Package for the current OS |
 
-## Known Limitations
+No code signing. Gatekeeper / SmartScreen warnings are expected.
 
-- Chrome only (other browsers not detected)
-- Attach-by-URL only (no automatic spreadsheet detection from browser)
-- No selection detection from the browser
+## Architecture (short)
+
+Electron main process (TypeScript) + React overlay. OS-specific window detection lives in `app/main/platform/`. Google OAuth and Sheets live in `app/main/auth/` and `app/main/sheets/`. The agent and tools are in `app/main/llm/`. Datasets and SEC EDGAR are in `app/main/datasets/` and `app/main/sec/`.
+
+Hackathon-era notes: [DEMO_GUIDE.md](DEMO_GUIDE.md), [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md).
+
+## Known limitations
+
+- Chrome only
+- Attach-by-URL (no automatic spreadsheet detection from the tab)
 - No undo/redo for writes
-- Token stored in plaintext JSON when keytar unavailable
+- Tokens stored as plaintext JSON when keytar is unavailable
+- Hackathon prototype — expect rough edges
